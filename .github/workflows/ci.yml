@@ -1,0 +1,17 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  engine-ui:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencies
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libfreetype-dev libharfbuzz-dev
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DAF_FRAMEWORK_BUILD_PLATFORM=OFF -DAF_FRAMEWORK_BUILD_VULKAN=OFF
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
