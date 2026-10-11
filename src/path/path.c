@@ -78,8 +78,8 @@ AfResult af_path_data_validate(const AfPathData *data) {
         }
         for (uint32_t command_index = 0U; command_index < path->command_count; ++command_index) {
             const AfPathCommand *command = &data->commands[path->command_start + command_index];
-            if (command->type > AF_PATH_CLOSE || !af_path_point_finite(command->point) ||
-                !af_path_point_finite(command->control1) ||
+            if (command->type > AF_PATH_CLOSE || command->handle_mode > AF_PATH_HANDLE_SYMMETRIC ||
+                !af_path_point_finite(command->point) || !af_path_point_finite(command->control1) ||
                 !af_path_point_finite(command->control2)) {
                 return AF_RESULT_INVALID_ARGUMENT;
             }

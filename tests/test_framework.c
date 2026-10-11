@@ -1,3 +1,4 @@
+#include "af/animation/animation.h"
 #include "af/core/allocator.h"
 #include "af/ui/actions.h"
 #include "af/ui/draw.h"
@@ -15,6 +16,65 @@
     } while (0)
 
 int main(void) {
+    {
+        AfSceneNode node = {.id = 1,
+                            .parent_id = AF_INVALID_NODE_ID,
+                            .type = AF_NODE_RECTANGLE,
+                            .local_transform = {.scale = {1, 1}},
+                            .bounds = {100, 100},
+                            .opacity = 1,
+                            .visible = true};
+        AfStyle style = af_style_default(1, 1, (AfColor){1, 0, 0, 1});
+        style.fill.type = AF_PAINT_LINEAR_GRADIENT;
+        style.fill.start = (AfVec2){0, 0};
+        style.fill.end = (AfVec2){100, 0};
+        style.fill.stop_count = 2;
+        style.fill.stops[0] = (AfGradientStop){0, {1, 0, 0, 1}};
+        style.fill.stops[1] = (AfGradientStop){1, {0, 0, 1, 1}};
+        style.stroke_paint = style.fill;
+        AfStyleData styles = {.styles = &style, .count = 1, .capacity = 1};
+        AfScene animated = {.nodes = &node, .count = 1, .capacity = 1, .styles = &styles};
+        AfAnimationTrack tracks[] = {{.id = 1,
+                                      .node_id = 1,
+                                      .property = AF_PROPERTY_GRADIENT_STOP_COLOR,
+                                      .keyframe_count = 2},
+                                     {.id = 2,
+                                      .node_id = 1,
+                                      .property = AF_PROPERTY_GRADIENT_STOP_COLOR,
+                                      .element_index = AF_ANIMATION_OUTLINE_ELEMENT + 1,
+                                      .keyframe_start = 2,
+                                      .keyframe_count = 2},
+                                     {.id = 3,
+                                      .node_id = 1,
+                                      .property = AF_PROPERTY_GRADIENT_END,
+                                      .element_index = AF_ANIMATION_OUTLINE_ELEMENT,
+                                      .keyframe_start = 4,
+                                      .keyframe_count = 2}};
+        AfKeyframe keys[] = {
+            {.time = 0, .value = {1, 0, 0, 1}, .interpolation = AF_INTERPOLATION_LINEAR},
+            {.time = 2, .value = {0, 1, 0, 1}},
+            {.time = 0, .value = {0, 0, 1, 1}, .interpolation = AF_INTERPOLATION_LINEAR},
+            {.time = 2, .value = {1, 1, 1, 1}},
+            {.time = 0, .value = {100, 0}, .interpolation = AF_INTERPOLATION_LINEAR},
+            {.time = 2, .value = {200, 100}}};
+        AfAnimationClip clip = {.id = 1, .duration = 2, .track_count = 3};
+        AfAnimationData animation = {.clips = &clip,
+                                     .clip_count = 1,
+                                     .tracks = tracks,
+                                     .track_count = 3,
+                                     .keyframes = keys,
+                                     .keyframe_count = 6};
+        CHECK(af_animation_validate(&animation, &animated) == AF_RESULT_SUCCESS);
+        CHECK(af_animation_apply(&animation, &clip, 1, &animated) == AF_RESULT_SUCCESS);
+        CHECK(fabsf(style.fill.stops[0].color.r - .5F) < .001F &&
+              fabsf(style.fill.stops[0].color.g - .5F) < .001F);
+        CHECK(fabsf(style.stroke_paint.stops[1].color.r - .5F) < .001F);
+        CHECK(style.stroke_paint.end.x == 150 && style.stroke_paint.end.y == 50 &&
+              style.fill.end.x == 100);
+        CHECK(af_style_data_validate(&styles) == AF_RESULT_SUCCESS);
+        tracks[0].element_index = AF_MAX_GRADIENT_STOPS * 2U;
+        CHECK(af_animation_validate(&animation, &animated) == AF_RESULT_INVALID_ARGUMENT);
+    }
     AfSceneNode nodes[8] = {0};
     AfScene scene;
     AfPath paths[8] = {0};

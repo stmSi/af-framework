@@ -52,3 +52,6 @@ Browser builds use Emscripten: `emcmake cmake -S . -B build/web`.
 Provide vendored dependencies with `AF_FRAMEWORK_DEPENDENCY_ROOT`; link `af::canvas`
 and include `af/canvas.h`. Vulkan defaults to off on this target. CPU billboard
 particles are supported; GPU-specific VFX require the Vulkan backend.
+
+Gradient tracks animate geometry, stop colors, and offsets. Elements 0–15 select
+fill stops; 16–31 select outline stops. Geometry uses element 0 or 16.

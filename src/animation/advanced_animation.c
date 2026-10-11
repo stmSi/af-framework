@@ -372,6 +372,49 @@ AfResult af_advanced_map_nested_time(const AfAdvancedAnimationData *advanced,
 static AfResult af_adv_apply_value(AfScene *scene, AfSceneNode *node, const AfAnimationTrack *track,
                                    const float value[4], float weight, bool additive) {
     const AfPropertyType property = track->property;
+    if (af_property_is_gradient(property) || property == AF_PROPERTY_OUTLINE_COLOR) {
+        if (!af_animation_target_valid(scene, track->node_id, property, track->element_index))
+            return AF_RESULT_INVALID_ARGUMENT;
+        const AfStyle *style = af_style_find_node_const(scene->styles, track->node_id);
+        const AfPaint *paint = track->element_index >= AF_ANIMATION_OUTLINE_ELEMENT
+                                   ? &style->stroke_paint
+                                   : &style->fill;
+        const uint32_t stop = track->element_index % AF_MAX_GRADIENT_STOPS;
+        float current[4] = {0};
+        switch (property) {
+        case AF_PROPERTY_OUTLINE_COLOR:
+            memcpy(current, &style->stroke_paint.solid, sizeof(AfColor));
+            break;
+        case AF_PROPERTY_GRADIENT_START:
+            current[0] = paint->start.x;
+            current[1] = paint->start.y;
+            break;
+        case AF_PROPERTY_GRADIENT_END:
+            current[0] = paint->end.x;
+            current[1] = paint->end.y;
+            break;
+        case AF_PROPERTY_GRADIENT_RADII:
+            current[0] = paint->start_radius;
+            current[1] = paint->end_radius;
+            break;
+        case AF_PROPERTY_GRADIENT_ANGLE:
+            current[0] = paint->angle;
+            break;
+        case AF_PROPERTY_GRADIENT_STOP_COLOR:
+            memcpy(current, &paint->stops[stop].color, sizeof(AfColor));
+            break;
+        case AF_PROPERTY_GRADIENT_STOP_OFFSET:
+            current[0] = paint->stops[stop].offset;
+            break;
+        default:
+            return AF_RESULT_INVALID_ARGUMENT;
+        }
+        for (uint32_t i = 0; i < 4; ++i)
+            current[i] = additive ? current[i] + value[i] * weight
+                                  : current[i] * (1 - weight) + value[i] * weight;
+        return af_animation_apply_value(scene, track->node_id, property, track->element_index,
+                                        current);
+    }
     if (property == AF_PROPERTY_POSITION) {
         node->local_transform.position.x =
             additive ? node->local_transform.position.x + value[0] * weight

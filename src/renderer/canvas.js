@@ -57,7 +57,7 @@ addToLibrary({
     AFCanvas.transform(matrix >> 2);
     ctx.beginPath();
     if (kind === 4) {
-      for (var i = 0, p = commands >> 2; i < count; ++i, p += 7) {
+      for (var i = 0, p = commands >> 2; i < count; ++i, p += 8) {
         switch (HEAPU32[p]) {
           case 0: ctx.moveTo(f[p + 1], f[p + 2]); break;
           case 1: ctx.lineTo(f[p + 1], f[p + 2]); break;

@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-_Static_assert(sizeof(AfPathCommand) == 7U * sizeof(float), "Canvas path ABI");
+_Static_assert(sizeof(AfPathCommand) == 8U * sizeof(float), "Canvas path ABI");
 _Static_assert(offsetof(AfPathCommand, point) == sizeof(float), "Canvas path point ABI");
 _Static_assert(sizeof(AfAffine2) == 6U * sizeof(float), "Canvas transform ABI");
 

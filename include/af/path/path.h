@@ -24,11 +24,18 @@ typedef enum AfPathCommandType {
 
 typedef enum AfPathFillRule { AF_PATH_FILL_NON_ZERO = 0, AF_PATH_FILL_EVEN_ODD } AfPathFillRule;
 
+typedef enum AfPathHandleMode {
+    AF_PATH_HANDLE_CUSP = 0,
+    AF_PATH_HANDLE_SMOOTH,
+    AF_PATH_HANDLE_SYMMETRIC
+} AfPathHandleMode;
+
 typedef struct AfPathCommand {
     AfPathCommandType type;
     AfVec2 point;
     AfVec2 control1;
     AfVec2 control2;
+    AfPathHandleMode handle_mode;
 } AfPathCommand;
 
 typedef struct AfPath {

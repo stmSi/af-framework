@@ -29,29 +29,32 @@ static float af_cubic_ease(float progress, const float easing[4]) {
     return af_bezier(easing[1], easing[3], (low + high) * 0.5F);
 }
 
-static bool af_animation_path_property(AfPropertyType property) {
-    return property >= AF_PROPERTY_PATH_POINT && property <= AF_PROPERTY_PATH_CONTROL_OUT;
-}
-
-static bool af_animation_track_target_valid(const AfAnimationTrack *track, const AfScene *scene) {
-    const AfSceneNode *node = af_scene_find_const(scene, track->node_id);
-    const AfPath *path = NULL;
-    const AfPathCommand *command = NULL;
-    if (node == NULL) {
+bool af_animation_target_valid(const AfScene *scene, uint64_t node_id, AfPropertyType property,
+                               uint32_t element_index) {
+    const AfSceneNode *node = af_scene_find_const(scene, node_id);
+    if (node == NULL || property > AF_PROPERTY_LAST)
         return false;
+    if (af_property_is_gradient(property)) {
+        const AfStyle *style = af_style_find_node_const(scene->styles, node_id);
+        if (style == NULL || element_index >= AF_MAX_GRADIENT_STOPS * 2U)
+            return false;
+        const AfPaint *paint =
+            element_index >= AF_ANIMATION_OUTLINE_ELEMENT ? &style->stroke_paint : &style->fill;
+        const uint32_t stop = element_index % AF_MAX_GRADIENT_STOPS;
+        if (paint->type == AF_PAINT_SOLID)
+            return false;
+        return property >= AF_PROPERTY_GRADIENT_STOP_COLOR ? stop < paint->stop_count : stop == 0;
     }
-    if (!af_animation_path_property(track->property)) {
-        return track->element_index == 0U;
-    }
-    path = af_path_find_node_const(scene->paths, track->node_id);
-    if (node->type != AF_NODE_PATH || path == NULL || track->element_index >= path->command_count) {
+    if (property == AF_PROPERTY_OUTLINE_COLOR)
+        return element_index == 0 && af_style_find_node_const(scene->styles, node_id) != NULL;
+    if (!af_property_is_path(property))
+        return element_index == 0U;
+    const AfPath *path = af_path_find_node_const(scene->paths, node_id);
+    if (node->type != AF_NODE_PATH || path == NULL || element_index >= path->command_count)
         return false;
-    }
-    command = &scene->paths->commands[path->command_start + track->element_index];
-    if (command->type == AF_PATH_CLOSE) {
-        return false;
-    }
-    return track->property == AF_PROPERTY_PATH_POINT || command->type == AF_PATH_CUBIC;
+    const AfPathCommand *command = &scene->paths->commands[path->command_start + element_index];
+    return command->type != AF_PATH_CLOSE &&
+           (property == AF_PROPERTY_PATH_POINT || command->type == AF_PATH_CUBIC);
 }
 
 AfResult af_animation_validate(const AfAnimationData *animation, const AfScene *scene) {
@@ -82,8 +85,9 @@ AfResult af_animation_validate(const AfAnimationData *animation, const AfScene *
         uint32_t key_index = 0U;
         uint32_t other = 0U;
         float last_time = -INFINITY;
-        if (track->id == 0U || track->property > AF_PROPERTY_PATH_CONTROL_OUT ||
-            !af_animation_track_target_valid(track, scene) ||
+        if (track->id == 0U || track->property > AF_PROPERTY_LAST ||
+            !af_animation_target_valid(scene, track->node_id, track->property,
+                                       track->element_index) ||
             track->keyframe_start > animation->keyframe_count ||
             track->keyframe_count > animation->keyframe_count - track->keyframe_start) {
             return AF_RESULT_INVALID_ARGUMENT;
@@ -171,6 +175,102 @@ AfResult af_animation_sample_track(const AfAnimationData *animation, const AfAni
     return AF_RESULT_SUCCESS;
 }
 
+AfResult af_animation_apply_value(AfScene *scene, uint64_t node_id, AfPropertyType property,
+                                  uint32_t element_index, const float value[4]) {
+    if (scene == NULL || value == NULL ||
+        !af_animation_target_valid(scene, node_id, property, element_index))
+        return AF_RESULT_INVALID_ARGUMENT;
+    for (uint32_t component = 0; component < 4; ++component)
+        if (!isfinite(value[component]))
+            return AF_RESULT_INVALID_ARGUMENT;
+    AfSceneNode *node = af_scene_find(scene, node_id);
+    if (af_property_is_gradient(property) || property == AF_PROPERTY_OUTLINE_COLOR) {
+        AfStyle *style = (AfStyle *)af_style_find_node_const(scene->styles, node_id);
+        AfPaint *paint =
+            element_index >= AF_ANIMATION_OUTLINE_ELEMENT ? &style->stroke_paint : &style->fill;
+        const uint32_t stop = element_index % AF_MAX_GRADIENT_STOPS;
+        switch (property) {
+        case AF_PROPERTY_OUTLINE_COLOR:
+            style->stroke_paint.solid = (AfColor){af_clamp01(value[0]), af_clamp01(value[1]),
+                                                  af_clamp01(value[2]), af_clamp01(value[3])};
+            break;
+        case AF_PROPERTY_GRADIENT_START:
+            paint->start = (AfVec2){value[0], value[1]};
+            break;
+        case AF_PROPERTY_GRADIENT_END:
+            paint->end = (AfVec2){value[0], value[1]};
+            break;
+        case AF_PROPERTY_GRADIENT_RADII:
+            paint->start_radius = fmaxf(value[0], 0);
+            paint->end_radius = fmaxf(value[1], 0);
+            break;
+        case AF_PROPERTY_GRADIENT_ANGLE:
+            paint->angle = value[0];
+            break;
+        case AF_PROPERTY_GRADIENT_STOP_COLOR:
+            paint->stops[stop].color = (AfColor){af_clamp01(value[0]), af_clamp01(value[1]),
+                                                 af_clamp01(value[2]), af_clamp01(value[3])};
+            break;
+        case AF_PROPERTY_GRADIENT_STOP_OFFSET:
+            paint->stops[stop].offset = fmaxf(
+                stop ? paint->stops[stop - 1].offset : 0,
+                fminf(stop + 1 < paint->stop_count ? paint->stops[stop + 1].offset : 1, value[0]));
+            break;
+        default:
+            return AF_RESULT_INVALID_ARGUMENT;
+        }
+        style->inherit_flags &= ~(uint32_t)(element_index >= AF_ANIMATION_OUTLINE_ELEMENT ||
+                                                    property == AF_PROPERTY_OUTLINE_COLOR
+                                                ? AF_STYLE_INHERIT_STROKE_PAINT
+                                                : AF_STYLE_INHERIT_FILL);
+        return af_style_mark_paint_changed(style);
+    }
+    switch (property) {
+    case AF_PROPERTY_POSITION:
+        node->local_transform.position = (AfVec2){value[0], value[1]};
+        break;
+    case AF_PROPERTY_ROTATION:
+        node->local_transform.rotation = value[0];
+        break;
+    case AF_PROPERTY_SCALE:
+        node->local_transform.scale = (AfVec2){value[0], value[1]};
+        break;
+    case AF_PROPERTY_SKEW:
+        node->local_transform.skew = (AfVec2){value[0], value[1]};
+        break;
+    case AF_PROPERTY_OPACITY:
+        node->opacity = af_clamp01(value[0]);
+        break;
+    case AF_PROPERTY_FILL_COLOR:
+        node->fill = (AfColor){value[0], value[1], value[2], value[3]};
+        break;
+    case AF_PROPERTY_CORNER_RADIUS:
+        node->corner_radius = value[0] < 0.0F ? 0.0F : value[0];
+        break;
+    case AF_PROPERTY_PATH_POINT:
+    case AF_PROPERTY_PATH_CONTROL_IN:
+    case AF_PROPERTY_PATH_CONTROL_OUT: {
+        AfPathData *paths = (AfPathData *)scene->paths;
+        AfPath *path = af_path_find_node(paths, node_id);
+        AfPathCommand *command = &paths->commands[path->command_start + element_index];
+        AfVec2 *target = property == AF_PROPERTY_PATH_POINT
+                             ? &command->point
+                             : (property == AF_PROPERTY_PATH_CONTROL_IN ? &command->control2
+                                                                        : &command->control1);
+        if (target->x != value[0] || target->y != value[1]) {
+            *target = (AfVec2){value[0], value[1]};
+            if (af_path_mark_geometry_changed(path) != AF_RESULT_SUCCESS) {
+                return AF_RESULT_LIMIT_EXCEEDED;
+            }
+        }
+        break;
+    }
+    default:
+        return AF_RESULT_INVALID_ARGUMENT;
+    }
+    return AF_RESULT_SUCCESS;
+}
+
 AfResult af_animation_apply(const AfAnimationData *animation, const AfAnimationClip *clip,
                             float time, AfScene *scene) {
     uint32_t track_index = 0U;
@@ -194,48 +294,10 @@ AfResult af_animation_apply(const AfAnimationData *animation, const AfAnimationC
         if (result != AF_RESULT_SUCCESS) {
             return result;
         }
-        switch (track->property) {
-        case AF_PROPERTY_POSITION:
-            node->local_transform.position = (AfVec2){value[0], value[1]};
-            break;
-        case AF_PROPERTY_ROTATION:
-            node->local_transform.rotation = value[0];
-            break;
-        case AF_PROPERTY_SCALE:
-            node->local_transform.scale = (AfVec2){value[0], value[1]};
-            break;
-        case AF_PROPERTY_SKEW:
-            node->local_transform.skew = (AfVec2){value[0], value[1]};
-            break;
-        case AF_PROPERTY_OPACITY:
-            node->opacity = af_clamp01(value[0]);
-            break;
-        case AF_PROPERTY_FILL_COLOR:
-            node->fill = (AfColor){value[0], value[1], value[2], value[3]};
-            break;
-        case AF_PROPERTY_CORNER_RADIUS:
-            node->corner_radius = value[0] < 0.0F ? 0.0F : value[0];
-            break;
-        case AF_PROPERTY_PATH_POINT:
-        case AF_PROPERTY_PATH_CONTROL_IN:
-        case AF_PROPERTY_PATH_CONTROL_OUT: {
-            AfPathData *paths = (AfPathData *)scene->paths;
-            AfPath *path = af_path_find_node(paths, track->node_id);
-            AfPathCommand *command = &paths->commands[path->command_start + track->element_index];
-            AfVec2 *target =
-                track->property == AF_PROPERTY_PATH_POINT
-                    ? &command->point
-                    : (track->property == AF_PROPERTY_PATH_CONTROL_IN ? &command->control2
-                                                                      : &command->control1);
-            if (target->x != value[0] || target->y != value[1]) {
-                *target = (AfVec2){value[0], value[1]};
-                if (af_path_mark_geometry_changed(path) != AF_RESULT_SUCCESS) {
-                    return AF_RESULT_LIMIT_EXCEEDED;
-                }
-            }
-            break;
-        }
-        }
+        result = af_animation_apply_value(scene, track->node_id, track->property,
+                                          track->element_index, value);
+        if (result != AF_RESULT_SUCCESS)
+            return result;
     }
     return af_scene_evaluate_world(scene);
 }

@@ -21,8 +21,32 @@ typedef enum AfPropertyType {
     AF_PROPERTY_SKEW,
     AF_PROPERTY_PATH_POINT,
     AF_PROPERTY_PATH_CONTROL_IN,
-    AF_PROPERTY_PATH_CONTROL_OUT
+    AF_PROPERTY_PATH_CONTROL_OUT,
+    AF_PROPERTY_OUTLINE_COLOR,
+    AF_PROPERTY_GRADIENT_START,
+    AF_PROPERTY_GRADIENT_END,
+    AF_PROPERTY_GRADIENT_RADII,
+    AF_PROPERTY_GRADIENT_ANGLE,
+    AF_PROPERTY_GRADIENT_STOP_COLOR,
+    AF_PROPERTY_GRADIENT_STOP_OFFSET,
+    AF_PROPERTY_LAST = AF_PROPERTY_GRADIENT_STOP_OFFSET
 } AfPropertyType;
+
+/* Gradient elements 0..15 target fill stops; 16..31 target outline stops.
+ * Geometry tracks use element 0 for fill and 16 for outline. */
+#define AF_ANIMATION_OUTLINE_ELEMENT AF_MAX_GRADIENT_STOPS
+
+static inline bool af_property_is_path(AfPropertyType property) {
+    return property >= AF_PROPERTY_PATH_POINT && property <= AF_PROPERTY_PATH_CONTROL_OUT;
+}
+static inline bool af_property_is_gradient(AfPropertyType property) {
+    return property >= AF_PROPERTY_GRADIENT_START && property <= AF_PROPERTY_GRADIENT_STOP_OFFSET;
+}
+
+bool af_animation_target_valid(const AfScene *scene, uint64_t node_id, AfPropertyType property,
+                               uint32_t element_index);
+AfResult af_animation_apply_value(AfScene *scene, uint64_t node_id, AfPropertyType property,
+                                  uint32_t element_index, const float value[4]);
 
 typedef enum AfInterpolation {
     AF_INTERPOLATION_STEP = 0,
