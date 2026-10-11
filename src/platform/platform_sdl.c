@@ -6,6 +6,35 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+extern void af_platform_js_dialog(int save, const char *extensions, const char *location,
+                                  int allow_many);
+static SDL_DialogFileCallback af_platform_dialog_callback;
+static void *af_platform_dialog_userdata;
+
+EMSCRIPTEN_KEEPALIVE void af_platform_web_dialog_complete(const char *const *paths) {
+    SDL_DialogFileCallback callback = af_platform_dialog_callback;
+    void *userdata = af_platform_dialog_userdata;
+    af_platform_dialog_callback = NULL;
+    af_platform_dialog_userdata = NULL;
+    if (callback != NULL)
+        callback(userdata, paths, 0);
+}
+
+static AfResult af_platform_web_dialog(SDL_DialogFileCallback callback, void *userdata,
+                                       const SDL_DialogFileFilter *filters, int filter_count,
+                                       const char *location, bool save, bool many) {
+    if (callback == NULL || af_platform_dialog_callback != NULL)
+        return AF_RESULT_INVALID_ARGUMENT;
+    af_platform_dialog_callback = callback;
+    af_platform_dialog_userdata = userdata;
+    af_platform_js_dialog(save, filter_count > 0 && filters != NULL ? filters[0].pattern : "",
+                          location != NULL ? location : "", many);
+    return AF_RESULT_SUCCESS;
+}
+#endif
+
 AfResult af_platform_window_create(const char *title, int width, int height,
                                    AfPlatformWindow *out_window) {
     if (title == NULL || width <= 0 || height <= 0 || out_window == NULL) {
@@ -17,9 +46,13 @@ AfResult af_platform_window_create(const char *title, int width, int height,
         return AF_RESULT_IO_ERROR;
     }
     out_window->sdl_initialized = true;
-    out_window->window =
-        SDL_CreateWindow(title, width, height,
-                         SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+    SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
+#ifdef __EMSCRIPTEN__
+    flags |= SDL_WINDOW_FILL_DOCUMENT;
+#else
+    flags |= SDL_WINDOW_VULKAN;
+#endif
+    out_window->window = SDL_CreateWindow(title, width, height, flags);
     if (out_window->window == NULL) {
         af_log(AF_LOG_ERROR, "SDL window creation failed: %s", SDL_GetError());
         af_platform_window_destroy(out_window);
@@ -231,9 +264,14 @@ AfResult af_platform_show_open_file_dialog(AfPlatformWindow *window,
         (filter_count != 0 && filters == NULL)) {
         return AF_RESULT_INVALID_ARGUMENT;
     }
+#ifdef __EMSCRIPTEN__
+    return af_platform_web_dialog(callback, userdata, filters, filter_count, default_location,
+                                  false, allow_many);
+#else
     SDL_ShowOpenFileDialog(callback, userdata, window->window, filters, filter_count,
                            default_location, allow_many);
     return AF_RESULT_SUCCESS;
+#endif
 }
 
 AfResult af_platform_show_save_file_dialog(AfPlatformWindow *window,
@@ -244,7 +282,12 @@ AfResult af_platform_show_save_file_dialog(AfPlatformWindow *window,
         (filter_count != 0 && filters == NULL)) {
         return AF_RESULT_INVALID_ARGUMENT;
     }
+#ifdef __EMSCRIPTEN__
+    return af_platform_web_dialog(callback, userdata, filters, filter_count, default_location, true,
+                                  false);
+#else
     SDL_ShowSaveFileDialog(callback, userdata, window->window, filters, filter_count,
                            default_location);
     return AF_RESULT_SUCCESS;
+#endif
 }

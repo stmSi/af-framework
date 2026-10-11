@@ -35,6 +35,7 @@ target_link_libraries(my_app PRIVATE af::framework)
 | `af::ui` | Drawing, inputs, actions, shortcuts |
 | `af::platform` | SDL3 windows and input |
 | `af::vulkan` | Vulkan rendering and capture |
+| `af::canvas` | Browser Canvas rendering (Emscripten) |
 | `af::framework` | All enabled layers |
 
 Include `af/engine.h`, `af/ui.h`, or `af/vulkan.h`. The caller owns UI buffers
@@ -46,3 +47,8 @@ FreeType, HarfBuzz, and SDL3 remain external dependencies.
 
 Deploy compiled `shaders/` beside the executable, or pass a shader directory to
 `af_vk_renderer_create_with_info`. Installed SDKs expose `AFFramework_SHADER_DIRECTORY`.
+
+Browser builds use Emscripten: `emcmake cmake -S . -B build/web`.
+Provide vendored dependencies with `AF_FRAMEWORK_DEPENDENCY_ROOT`; link `af::canvas`
+and include `af/canvas.h`. Vulkan defaults to off on this target. CPU billboard
+particles are supported; GPU-specific VFX require the Vulkan backend.

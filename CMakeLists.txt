@@ -9,7 +9,12 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
 option(AF_FRAMEWORK_BUILD_PLATFORM "Build SDL window and input integration" ON)
-option(AF_FRAMEWORK_BUILD_VULKAN "Build the Vulkan renderer" ON)
+set(AF_FRAMEWORK_DEFAULT_VULKAN ON)
+if(EMSCRIPTEN)
+    set(AF_FRAMEWORK_DEFAULT_VULKAN OFF)
+endif()
+option(AF_FRAMEWORK_BUILD_VULKAN "Build the Vulkan renderer" ${AF_FRAMEWORK_DEFAULT_VULKAN})
+option(AF_FRAMEWORK_BUILD_CANVAS "Build the browser Canvas renderer" ${EMSCRIPTEN})
 option(AF_FRAMEWORK_ENABLE_VALIDATION "Enable Vulkan validation when available" ON)
 option(AF_FRAMEWORK_BUILD_TESTS "Build framework tests" ${PROJECT_IS_TOP_LEVEL})
 option(AF_FRAMEWORK_BUILD_EXAMPLES "Build the standalone framework example" ${PROJECT_IS_TOP_LEVEL})
@@ -22,6 +27,9 @@ set(AF_FRAMEWORK_SHADER_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/shaders" CACHE P
 
 if(AF_FRAMEWORK_BUILD_VULKAN AND NOT AF_FRAMEWORK_BUILD_PLATFORM)
     message(FATAL_ERROR "The Vulkan window renderer requires AF_FRAMEWORK_BUILD_PLATFORM")
+endif()
+if(AF_FRAMEWORK_BUILD_CANVAS AND (NOT EMSCRIPTEN OR NOT AF_FRAMEWORK_BUILD_PLATFORM))
+    message(FATAL_ERROR "The Canvas renderer requires Emscripten and the platform layer")
 endif()
 include(cmake/Dependencies.cmake)
 
@@ -69,6 +77,23 @@ if(AF_FRAMEWORK_BUILD_PLATFORM)
     af_framework_library(af_platform platform src/platform/platform_sdl.c)
     target_link_libraries(af_platform PUBLIC af_foundation
         "$<BUILD_INTERFACE:SDL3::SDL3-static>" "$<INSTALL_INTERFACE:AFFramework::SDL3>")
+    if(EMSCRIPTEN)
+        target_link_options(af_platform PUBLIC
+            "$<BUILD_INTERFACE:SHELL:--js-library ${CMAKE_CURRENT_SOURCE_DIR}/src/platform/browser.js>")
+        set_property(TARGET af_platform APPEND PROPERTY INTERFACE_LINK_DEPENDS
+            "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/platform/browser.js>")
+        install(FILES src/platform/browser.js DESTINATION "${CMAKE_INSTALL_DATADIR}/af-framework")
+    endif()
+endif()
+
+if(AF_FRAMEWORK_BUILD_CANVAS)
+    af_framework_library(af_canvas canvas src/renderer/canvas.c)
+    target_link_libraries(af_canvas PUBLIC af_engine af_platform)
+    target_link_options(af_canvas PUBLIC
+        "$<BUILD_INTERFACE:SHELL:--js-library ${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/canvas.js>")
+    set_property(TARGET af_canvas APPEND PROPERTY INTERFACE_LINK_DEPENDS
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/canvas.js>")
+    install(FILES src/renderer/canvas.js DESTINATION "${CMAKE_INSTALL_DATADIR}/af-framework")
 endif()
 
 if(AF_FRAMEWORK_BUILD_VULKAN)
@@ -108,6 +133,9 @@ if(AF_FRAMEWORK_BUILD_PLATFORM)
 endif()
 if(AF_FRAMEWORK_BUILD_VULKAN)
     target_link_libraries(af_framework INTERFACE af_vulkan)
+endif()
+if(AF_FRAMEWORK_BUILD_CANVAS)
+    target_link_libraries(af_framework INTERFACE af_canvas)
 endif()
 install(TARGETS af_framework EXPORT AFFrameworkTargets)
 install(DIRECTORY include/ DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/af-framework")

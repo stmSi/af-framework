@@ -28,5 +28,13 @@ if(@AF_FRAMEWORK_BUILD_PLATFORM@)
     endif()
 endif()
 include("${CMAKE_CURRENT_LIST_DIR}/AFFrameworkTargets.cmake")
+if("@EMSCRIPTEN@" AND @AF_FRAMEWORK_BUILD_PLATFORM@)
+    target_link_options(af::platform INTERFACE
+        "SHELL:--js-library ${AFFramework_INSTALL_PREFIX}/@CMAKE_INSTALL_DATADIR@/af-framework/browser.js")
+endif()
+if(@AF_FRAMEWORK_BUILD_CANVAS@)
+    target_link_options(af::canvas INTERFACE
+        "SHELL:--js-library ${AFFramework_INSTALL_PREFIX}/@CMAKE_INSTALL_DATADIR@/af-framework/canvas.js")
+endif()
 set(AFFramework_SHADER_DIRECTORY "${AFFramework_INSTALL_PREFIX}/@CMAKE_INSTALL_DATADIR@/af-framework/shaders")
 check_required_components(AFFramework)
