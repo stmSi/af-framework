@@ -135,9 +135,7 @@ _Static_assert(sizeof(AfGpuParticleEmitterState) == 48U, "GPU emitter state layo
 _Static_assert(sizeof(AfGpuParticleStep) == 32U, "GPU step push constant mismatch");
 _Static_assert(sizeof(AfGpuParticleView) == 48U, "GPU view push constant mismatch");
 
-static double af_vk_particle_now_milliseconds(void) {
-    return (double)SDL_GetTicksNS() * 0.000001;
-}
+static double af_vk_particle_now_milliseconds(void) { return (double)SDL_GetTicksNS() * 0.000001; }
 
 static void af_vk_particles_collect_gpu_metrics(AfVkParticleSystem *system, uint32_t frame_index) {
     uint64_t timestamps[2] = {0U, 0U};
