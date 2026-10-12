@@ -13,7 +13,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #define AF_PARTICLE_FRAME_COUNT 2U
 #define AF_PARTICLE_BUFFER_COUNT 8U
@@ -137,11 +136,7 @@ _Static_assert(sizeof(AfGpuParticleStep) == 32U, "GPU step push constant mismatc
 _Static_assert(sizeof(AfGpuParticleView) == 48U, "GPU view push constant mismatch");
 
 static double af_vk_particle_now_milliseconds(void) {
-    struct timespec value;
-    if (timespec_get(&value, TIME_UTC) != TIME_UTC) {
-        return 0.0;
-    }
-    return (double)value.tv_sec * 1000.0 + (double)value.tv_nsec * 0.000001;
+    return (double)SDL_GetTicksNS() * 0.000001;
 }
 
 static void af_vk_particles_collect_gpu_metrics(AfVkParticleSystem *system, uint32_t frame_index) {
