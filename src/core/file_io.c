@@ -12,7 +12,9 @@
 #include <string.h>
 
 #if defined(_WIN32)
+#include <fcntl.h>
 #include <io.h>
+#include <sys/stat.h>
 #include <windows.h>
 #else
 #include <fcntl.h>
@@ -82,7 +84,22 @@ static AfResult af_file_open_temporary(const char *target_path, char **out_path,
             return AF_RESULT_IO_ERROR;
         }
         errno = 0;
+#if defined(_WIN32)
+        /* The legacy Windows CRT does not support fopen's C11 exclusive-create mode. */
+        const int descriptor =
+            _open(temporary_path, _O_WRONLY | _O_CREAT | _O_EXCL | _O_BINARY, _S_IREAD | _S_IWRITE);
+        if (descriptor >= 0) {
+            temporary_file = _fdopen(descriptor, "wb");
+            if (temporary_file == NULL) {
+                const int stream_error = errno;
+                (void)_close(descriptor);
+                (void)DeleteFileA(temporary_path);
+                errno = stream_error;
+            }
+        }
+#else
         temporary_file = fopen(temporary_path, "wbx");
+#endif
         open_error = errno;
         if (temporary_file != NULL) {
             *out_path = temporary_path;
