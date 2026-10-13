@@ -108,6 +108,31 @@ static float af_ui_button_feedback(AfUiContext *ui, float x, float y, float widt
     return feedback->amount;
 }
 
+void af_ui_add_gradient_surface(AfUiContext *ui, float x, float y, float width, float height,
+                                AfColor top, AfColor bottom, float radius, int32_t layer) {
+    if (ui == NULL || ui->scene == NULL || width <= 0 || height <= 0)
+        return;
+    const uint32_t before = ui->scene->count;
+    af_ui_add_surface(ui, x, y, width, height, top, radius, layer);
+    if (ui->scene->count == before || ui->surface_styles == NULL)
+        return;
+    AfStyleData *data = ui->surface_styles;
+    if (data->styles == NULL || data->count >= data->capacity) {
+        ui->overflowed = true;
+        return;
+    }
+    const uint64_t id = ui->scene->nodes[before].id;
+    AfStyle *style = &data->styles[data->count++];
+    *style = af_style_default(id, id, top);
+    style->fill.type = AF_PAINT_LINEAR_GRADIENT;
+    style->fill.start = (AfVec2){0, 0};
+    style->fill.end = (AfVec2){0, height};
+    style->fill.stop_count = 2;
+    style->fill.stops[0] = (AfGradientStop){0, top};
+    style->fill.stops[1] = (AfGradientStop){1, bottom};
+    style->paint_generation = af_hash_bytes(&style->fill, sizeof(style->fill)) | UINT64_C(1);
+}
+
 void af_ui_add_button_rounded(AfUiContext *ui, float x, float y, float width, float height,
                               AfColor color, float radius, int32_t layer) {
     const float feedback = af_ui_button_feedback(ui, x, y, width, height, layer);
@@ -124,6 +149,25 @@ void af_ui_add_button_rounded(AfUiContext *ui, float x, float y, float width, fl
     border.b = af_ui_clamp(border.b, 0, 1);
     if (ui->high_contrast)
         border = ui->contrast_border;
+    const float depth = af_ui_clamp(ui->surface_depth, 0, 1);
+    if (depth > 0 && ui->surface_styles != NULL && !ui->high_contrast) {
+        const float offset = pressed ? .5F : 2;
+        const AfColor shadow = {.01F, .012F, .02F, color.a * depth * (pressed ? .18F : .55F)};
+        af_ui_add_surface(ui, x, y + offset, width, height, shadow, radius, layer - 1);
+        const AfColor rim_bottom = {color.r * .45F, color.g * .45F, color.b * .45F, color.a};
+        af_ui_add_gradient_surface(ui, x, y, width, height, border, rim_bottom, radius, layer);
+        AfColor top = color, bottom = color;
+        const float light = pressed ? -.015F : .05F;
+        top.r = af_ui_clamp(color.r + light * depth, 0, 1);
+        top.g = af_ui_clamp(color.g + light * depth, 0, 1);
+        top.b = af_ui_clamp(color.b + light * depth, 0, 1);
+        bottom.r *= 1 - depth * .19F;
+        bottom.g *= 1 - depth * .19F;
+        bottom.b *= 1 - depth * .19F;
+        af_ui_add_gradient_surface(ui, x + 1, y + 1, width - 2, height - 2, top, bottom,
+                                   fmaxf(0, radius - 1), layer + 1);
+        return;
+    }
     af_ui_add_surface(ui, x, y, width, height, border, radius, layer);
     af_ui_add_surface(ui, x + 1, y + 1, width - 2, height - 2, color, fmaxf(0, radius - 1),
                       layer + 1);

@@ -24,6 +24,9 @@ typedef struct AfUiContext {
     uint64_t node_id_base;
     AfVec2 pointer;
     AfColor contrast_border;
+    /* Optional caller-owned paint buffer; reset its UI entries before each frame. */
+    AfStyleData *surface_styles;
+    float surface_depth;
     AfUiHoverFeedback hover_feedback[256];
     uint32_t frame;
     float delta_seconds;
@@ -45,6 +48,8 @@ void af_ui_add_rect(AfUiContext *ui, float x, float y, float width, float height
                     int32_t layer);
 void af_ui_add_surface(AfUiContext *ui, float x, float y, float width, float height, AfColor color,
                        float radius, int32_t layer);
+void af_ui_add_gradient_surface(AfUiContext *ui, float x, float y, float width, float height,
+                                AfColor top, AfColor bottom, float radius, int32_t layer);
 void af_ui_add_button_rect(AfUiContext *ui, float x, float y, float width, float height,
                            AfColor color, int32_t layer);
 void af_ui_add_button_rounded(AfUiContext *ui, float x, float y, float width, float height,
